@@ -23,6 +23,7 @@ import com.example.model.HudLayoutPreset
 import com.example.model.SensitivitySettings
 import com.example.model.TeamMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -86,11 +87,28 @@ abstract class SaniDatabase : RoomDatabase() {
                     .also { INSTANCE = it }
             }
         }
+
+        fun getInstanceOrNull(context: Context): SaniDatabase? {
+            return try {
+                getInstance(context)
+            } catch (_: Throwable) {
+                null
+            }
+        }
     }
 }
 
-class PlayerRepository(private val dao: PlayerProfileDao) {
-    val profileFlow: Flow<PlayerProfileEntity?> = dao.observeProfile()
+class PlayerRepository(
+    private val dao: PlayerProfileDao? = null,
+    private val appContext: Context? = null
+) {
+    val profileFlow: Flow<PlayerProfileEntity?> by lazy {
+        try {
+            dao?.observeProfile() ?: emptyFlow()
+        } catch (_: Throwable) {
+            emptyFlow()
+        }
+    }
 
     @Volatile
     private var cachedProfile: PlayerProfileEntity? = null
@@ -98,9 +116,9 @@ class PlayerRepository(private val dao: PlayerProfileDao) {
     fun getOrInitProfileSync(nowMs: Long = System.currentTimeMillis()): PlayerProfileEntity {
         val currentDay = (nowMs.coerceAtLeast(0L)) / TWENTY_FOUR_HOURS_MS
         val existing = try {
-            dao.getProfileSync()
-        } catch (_: Exception) {
-            cachedProfile
+            dao?.getProfileSync() ?: loadBackupPrefsProfile() ?: cachedProfile
+        } catch (_: Throwable) {
+            loadBackupPrefsProfile() ?: cachedProfile
         }
         if (existing == null) {
             val initial = PlayerProfileEntity(
@@ -136,6 +154,7 @@ class PlayerRepository(private val dao: PlayerProfileDao) {
             saveProfileSync(sanitized)
         } else {
             cachedProfile = sanitized
+            saveBackupPrefsProfile(sanitized)
         }
         return sanitized
     }
@@ -147,20 +166,81 @@ class PlayerRepository(private val dao: PlayerProfileDao) {
     fun saveProfileSync(entity: PlayerProfileEntity) {
         val clean = sanitizeProfileEntity(entity)
         cachedProfile = clean
+        saveBackupPrefsProfile(clean)
         try {
-            dao.saveProfileSync(clean)
-        } catch (_: Exception) {
-            // Ignored if database is already closed during test teardown
+            dao?.saveProfileSync(clean)
+        } catch (_: Throwable) {
+            // Safe fallback if database is unavailable or closed during test teardown
         }
     }
 
     suspend fun saveProfile(entity: PlayerProfileEntity) {
         val clean = sanitizeProfileEntity(entity)
         cachedProfile = clean
+        saveBackupPrefsProfile(clean)
         try {
-            dao.saveProfile(clean)
-        } catch (_: Exception) {
+            if (dao != null) {
+                dao.saveProfile(clean)
+            }
+        } catch (_: Throwable) {
             saveProfileSync(clean)
+        }
+    }
+
+    private fun saveBackupPrefsProfile(entity: PlayerProfileEntity) {
+        val ctx = appContext ?: return
+        try {
+            val prefs = ctx.getSharedPreferences("sani_profile_backup_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("selectedCharacter", entity.selectedCharacter)
+                .putString("selectedTeamMode", entity.selectedTeamMode)
+                .putInt("level", entity.level)
+                .putInt("xp", entity.xp)
+                .putString("unlockedCosmeticsCsv", entity.unlockedCosmeticsCsv)
+                .putString("equippedOutfitId", entity.equippedOutfitId)
+                .putString("equippedWeaponSkinId", entity.equippedWeaponSkinId)
+                .putInt("activeHudSlot", entity.activeHudSlot)
+                .putString("hudLayoutsJson", entity.hudLayoutsJson)
+                .putString("graphicsQuality", entity.graphicsQuality)
+                .putString("fpsTargetMode", entity.fpsTargetMode)
+                .putBoolean("aimAssistEnabled", entity.aimAssistEnabled)
+                .putString("sensitivityJson", entity.sensitivityJson)
+                .putString("autoLootJson", entity.autoLootJson)
+                .putString("dailyMissionsJson", entity.dailyMissionsJson)
+                .putLong("lastMissionResetDay", entity.lastMissionResetDay)
+                .putBoolean("hasSavedProfile", true)
+                .apply()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun loadBackupPrefsProfile(): PlayerProfileEntity? {
+        val ctx = appContext ?: return null
+        return try {
+            val prefs = ctx.getSharedPreferences("sani_profile_backup_prefs", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("hasSavedProfile", false)) return null
+            PlayerProfileEntity(
+                id = 1,
+                selectedCharacter = prefs.getString("selectedCharacter", CharacterId.SANI.name) ?: CharacterId.SANI.name,
+                selectedTeamMode = prefs.getString("selectedTeamMode", TeamMode.SQUAD.name) ?: TeamMode.SQUAD.name,
+                level = prefs.getInt("level", 1),
+                xp = prefs.getInt("xp", 0),
+                unlockedCosmeticsCsv = prefs.getString("unlockedCosmeticsCsv", "char_sani_default,char_rima_default")
+                    ?: "char_sani_default,char_rima_default",
+                equippedOutfitId = prefs.getString("equippedOutfitId", "char_sani_default") ?: "char_sani_default",
+                equippedWeaponSkinId = prefs.getString("equippedWeaponSkinId", "skin_vx47_cobalt") ?: "skin_vx47_cobalt",
+                activeHudSlot = prefs.getInt("activeHudSlot", 0),
+                hudLayoutsJson = prefs.getString("hudLayoutsJson", "") ?: "",
+                graphicsQuality = prefs.getString("graphicsQuality", GraphicsQuality.LOW.name) ?: GraphicsQuality.LOW.name,
+                fpsTargetMode = prefs.getString("fpsTargetMode", FpsTargetMode.AUTO_FPS.name) ?: FpsTargetMode.AUTO_FPS.name,
+                aimAssistEnabled = prefs.getBoolean("aimAssistEnabled", true),
+                sensitivityJson = prefs.getString("sensitivityJson", "") ?: "",
+                autoLootJson = prefs.getString("autoLootJson", "") ?: "",
+                dailyMissionsJson = prefs.getString("dailyMissionsJson", "") ?: "",
+                lastMissionResetDay = prefs.getLong("lastMissionResetDay", 0L)
+            )
+        } catch (_: Throwable) {
+            null
         }
     }
 

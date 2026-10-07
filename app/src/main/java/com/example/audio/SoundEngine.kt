@@ -17,32 +17,71 @@ class SoundEngine {
     private val executor = ThreadPoolExecutor(
         1,
         1,
-        0L,
+        2000L,
         TimeUnit.MILLISECONDS,
         ArrayBlockingQueue(3),
         ThreadPoolExecutor.DiscardOldestPolicy()
-    )
+    ).apply {
+        try {
+            allowCoreThreadTimeOut(true)
+        } catch (_: Throwable) {
+        }
+    }
     @Volatile
     var isMuted: Boolean = false
 
-    // Pre-allocated PCM sound buffers (object-pooled for Vivo Y03 low-end optimization)
-    private val rifleShotPcm = buildGunshotPcm(durationMs = 85, baseFreq = 190.0, decay = 34.0)
-    private val shotgunPcm = buildGunshotPcm(durationMs = 130, baseFreq = 110.0, decay = 22.0)
-    private val sniperPcm = buildGunshotPcm(durationMs = 160, baseFreq = 140.0, decay = 18.0)
-    private val reloadPcm = buildDoubleClickPcm(freq1 = 580.0, freq2 = 820.0)
-    private val footstepNormalPcm = buildFootstepPcm(volume = 0.28f, freq = 125.0)
-    private val footstepSprintPcm = buildFootstepPcm(volume = 0.46f, freq = 155.0)
-    private val footstepCrouchPcm = buildFootstepPcm(volume = 0.12f, freq = 100.0)
-    private val jumpPcm = buildJumpPcm()
-    private val pickupPcm = buildChimePcm(freqStart = 520.0, freqEnd = 780.0, durationMs = 75)
-    private val coinPcm = buildChimePcm(freqStart = 880.0, freqEnd = 1320.0, durationMs = 90)
-    private val hitMarkerPcm = buildChimePcm(freqStart = 1200.0, freqEnd = 650.0, durationMs = 45)
-    private val knockDeathPcm = buildChimePcm(freqStart = 340.0, freqEnd = 120.0, durationMs = 210)
-    private val zoneWarningPcm = buildChimePcm(freqStart = 440.0, freqEnd = 620.0, durationMs = 190)
-    private val saniAbilityPcm = buildSaniOverdrivePcm()
-    private val rimaAbilityPcm = buildRimaPulsePcm()
-    private val uiClickPcm = buildChimePcm(freqStart = 680.0, freqEnd = 900.0, durationMs = 35)
-    private val friendlyCalloutPcm = buildDoubleClickPcm(freq1 = 940.0, freq2 = 1180.0)
+    // Lazy-initialized PCM sound buffers (zero work on main thread during app launch; object-pooled for Vivo Y03)
+    private val rifleShotPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildGunshotPcm(durationMs = 85, baseFreq = 190.0, decay = 34.0)
+    }
+    private val shotgunPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildGunshotPcm(durationMs = 130, baseFreq = 110.0, decay = 22.0)
+    }
+    private val sniperPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildGunshotPcm(durationMs = 160, baseFreq = 140.0, decay = 18.0)
+    }
+    private val reloadPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildDoubleClickPcm(freq1 = 580.0, freq2 = 820.0)
+    }
+    private val footstepNormalPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildFootstepPcm(volume = 0.28f, freq = 125.0)
+    }
+    private val footstepSprintPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildFootstepPcm(volume = 0.46f, freq = 155.0)
+    }
+    private val footstepCrouchPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildFootstepPcm(volume = 0.12f, freq = 100.0)
+    }
+    private val jumpPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildJumpPcm()
+    }
+    private val pickupPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildChimePcm(freqStart = 520.0, freqEnd = 780.0, durationMs = 75)
+    }
+    private val coinPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildChimePcm(freqStart = 880.0, freqEnd = 1320.0, durationMs = 90)
+    }
+    private val hitMarkerPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildChimePcm(freqStart = 1200.0, freqEnd = 650.0, durationMs = 45)
+    }
+    private val knockDeathPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildChimePcm(freqStart = 340.0, freqEnd = 120.0, durationMs = 210)
+    }
+    private val zoneWarningPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildChimePcm(freqStart = 440.0, freqEnd = 620.0, durationMs = 190)
+    }
+    private val saniAbilityPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildSaniOverdrivePcm()
+    }
+    private val rimaAbilityPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildRimaPulsePcm()
+    }
+    private val uiClickPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildChimePcm(freqStart = 680.0, freqEnd = 900.0, durationMs = 35)
+    }
+    private val friendlyCalloutPcm by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        buildDoubleClickPcm(freq1 = 940.0, freq2 = 1180.0)
+    }
 
     val saniAbilitySignatureHash: Int get() = saniAbilityPcm.contentHashCode()
     val rimaAbilitySignatureHash: Int get() = rimaAbilityPcm.contentHashCode()
@@ -244,6 +283,16 @@ class SoundEngine {
                 var track: AudioTrack? = null
                 try {
                     val byteCount = pcmData.size * 2
+                    val minBuffer = try {
+                        AudioTrack.getMinBufferSize(
+                            sampleRate,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT
+                        )
+                    } catch (_: Throwable) {
+                        1024
+                    }
+                    val safeBufferBytes = maxOf(byteCount, minBuffer, 1024)
                     track = AudioTrack.Builder()
                         .setAudioAttributes(
                             AudioAttributes.Builder()
@@ -258,13 +307,15 @@ class SoundEngine {
                                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                                 .build()
                         )
-                        .setBufferSizeInBytes(byteCount.coerceAtLeast(1024))
+                        .setBufferSizeInBytes(safeBufferBytes)
                         .setTransferMode(AudioTrack.MODE_STATIC)
                         .build()
-                    track.write(pcmData, 0, pcmData.size)
-                    track.play()
-                    Thread.sleep((pcmData.size * 1000L / sampleRate) + 12L)
-                    track.stop()
+                    if (track.state == AudioTrack.STATE_INITIALIZED) {
+                        track.write(pcmData, 0, pcmData.size)
+                        track.play()
+                        Thread.sleep((pcmData.size * 1000L / sampleRate) + 12L)
+                        track.stop()
+                    }
                 } catch (_: Throwable) {
                     // Safe fallback in headless/test or low-memory environments
                 } finally {

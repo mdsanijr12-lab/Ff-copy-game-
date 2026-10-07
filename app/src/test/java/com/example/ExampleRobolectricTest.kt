@@ -1827,13 +1827,27 @@ class ExampleRobolectricTest {
         assertEquals("Reload sound must play on manual reload", 1, sound.reloadPlayCount)
 
         // Knock & Revive flow in Duo (move nearby enemy away so teammate safely revives knocked player)
-        vm.updateBotForTest(firstEnemy.id) { it.copy(x = 240f, z = 240f) }
+        vm.uiState.value.bots.filter { !it.isFriendly }.forEach { enemy ->
+            if (kotlin.math.hypot(enemy.x - vm.uiState.value.playerX, enemy.z - vm.uiState.value.playerZ) < 45f) {
+                vm.updateBotForTest(enemy.id) { it.copy(x = 240f, z = 240f) }
+            }
+        }
+        val livingAlly = vm.uiState.value.bots.first { it.isFriendly }
+        vm.updateBotForTest(livingAlly.id) {
+            it.copy(
+                x = vm.uiState.value.playerX + 1.2f,
+                z = vm.uiState.value.playerZ,
+                hp = 100f,
+                isKnocked = false,
+                isDead = false,
+                healTimerSec = 0f,
+                drivingVehicleId = null
+            )
+        }
         sound.resetAudioCountersForTest()
         vm.applyDamageToPlayerForTest(damage = 250f, bypassArmor = true)
         assertTrue("Player must enter Knocked state when HP reaches 0 with living teammate", vm.uiState.value.isPlayerKnocked)
         assertEquals("Knock/death sound must play when knocked", 1, sound.deathPlayCount)
-        val livingAlly = vm.uiState.value.livingTeammates.first()
-        vm.updateBotForTest(livingAlly.id) { it.copy(x = vm.uiState.value.playerX + 1.2f, z = vm.uiState.value.playerZ) }
         repeat(16) { vm.stepSimulationForTest(0.25f) }
         assertFalse("Teammate must revive knocked player", vm.uiState.value.isPlayerKnocked)
         assertTrue("Revived player must have low HP restored", vm.uiState.value.playerHp >= 30f)
@@ -1876,5 +1890,30 @@ class ExampleRobolectricTest {
         assertEquals("Enemy voice count must remain 0 throughout entire flow", 0, sound.enemyVoicePlayCount)
 
         db.close()
+    }
+
+    @Test
+    fun mainActivityLaunch_splashToLobbyCharacterSelectAndStartMatch_succeedsOfflineWithoutCrash() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // 1. Verify SafeBitmapLoader decodes all drawables safely with bounded dimensions and handles invalid IDs
+        val banner = com.example.ui.render.SafeBitmapLoader.loadSafeImageBitmap(
+            context,
+            R.drawable.img_sani_banner_1791221363697,
+            maxDimensionPx = 480
+        )
+        assertTrue("Banner bitmap should decode safely", banner != null)
+        assertTrue("Banner width must be bounded for low-end GPUs", banner!!.width <= 512)
+        assertTrue(
+            "Invalid drawable resource ID must return null safely without crashing",
+            com.example.ui.render.SafeBitmapLoader.loadSafeImageBitmap(context, 0, maxDimensionPx = 256) == null
+        )
+
+        // 2. Verify MainActivity launches offline without throwing any exception
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        assertTrue("MainActivity must launch and initialize successfully", activity != null)
+
+        controller.pause().stop().destroy()
     }
 }

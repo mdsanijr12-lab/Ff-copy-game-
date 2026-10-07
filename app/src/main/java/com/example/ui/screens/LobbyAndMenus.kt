@@ -60,7 +60,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -69,6 +68,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.R
 import com.example.engine.BattleRoyaleViewModel
 import com.example.engine.MatchUiState
+import com.example.ui.render.SafeDrawableImage
 import com.example.model.CharacterId
 import com.example.model.CosmeticCatalog
 import com.example.model.FpsTargetMode
@@ -137,10 +137,11 @@ fun LobbyScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .border(1.dp, Color(0xFF00E5FF), RoundedCornerShape(12.dp))
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.img_sani_banner_1791221363697),
+                        SafeDrawableImage(
+                            resId = R.drawable.img_sani_banner_1791221363697,
                             contentDescription = "SANI Official Arena Banner",
                             contentScale = ContentScale.Crop,
+                            maxDimensionPx = 480,
                             modifier = Modifier.fillMaxSize()
                         )
                         Surface(
@@ -201,10 +202,12 @@ fun LobbyScreen(
                                             .height(150.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                     ) {
-                                        Image(
-                                            painter = painterResource(id = charId.portraitRes),
+                                        SafeDrawableImage(
+                                            resId = charId.portraitRes,
                                             contentDescription = "${charId.displayName} Operative Reference",
                                             contentScale = ContentScale.Crop,
+                                            maxDimensionPx = 320,
+                                            fallbackAccentColor = accent,
                                             modifier = Modifier.fillMaxSize()
                                         )
                                         if (isSelected) {
@@ -1186,10 +1189,12 @@ fun MatchLoadingOverlay(
                         .clip(RoundedCornerShape(12.dp))
                         .border(1.dp, accent, RoundedCornerShape(12.dp))
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_sani_banner_1791221363697),
+                    SafeDrawableImage(
+                        resId = R.drawable.img_sani_banner_1791221363697,
                         contentDescription = "SANI Battle Royale Loading Banner",
                         contentScale = ContentScale.Crop,
+                        maxDimensionPx = 480,
+                        fallbackAccentColor = accent,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

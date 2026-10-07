@@ -143,7 +143,10 @@ fun World3DViewport(
     onCameraDrag: (Float, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val saniBannerBitmap = ImageBitmap.imageResource(id = R.drawable.img_sani_banner_1791221363697)
+    val saniBannerBitmap = rememberSafeImageBitmap(
+        resId = R.drawable.img_sani_banner_1791221363697,
+        maxDimensionPx = 384
+    )
     val textMeasurer = rememberTextMeasurer()
     val currentOnCameraDrag by rememberUpdatedState(onCameraDrag)
     // Object-pooled command buffer reused across frames to minimize allocations on Vivo Y03
@@ -181,6 +184,7 @@ fun World3DViewport(
     ) {
         val w = size.width
         val h = size.height
+        if (w <= 2f || h <= 2f) return@Canvas
         val fovScale = state.smoothFovScale.coerceIn(1f, 3.6f)
         val focalLength = (w * 0.62f) * fovScale
         val effectivePitch = (state.playerPitchDeg + if (state.isFreeLooking) state.freeLookPitchOffsetDeg else 0f).coerceIn(-38f, 38f)
@@ -723,7 +727,7 @@ private fun DrawScope.draw3DRock(cmd: RockRenderCmd) {
 
 private fun DrawScope.drawSaniBillboard(
     cmd: BillboardRenderCmd,
-    saniBannerBitmap: ImageBitmap,
+    saniBannerBitmap: ImageBitmap?,
     textMeasurer: TextMeasurer
 ) {
     val boardW = (cmd.widthMeters * cmd.scale).coerceIn(28f, size.width * 0.75f)
@@ -751,11 +755,19 @@ private fun DrawScope.drawSaniBillboard(
         cornerRadius = CornerRadius(6f, 6f)
     )
 
-    drawImage(
-        image = saniBannerBitmap,
-        dstOffset = IntOffset(left.toInt(), top.toInt()),
-        dstSize = IntSize(boardW.toInt().coerceAtLeast(1), boardH.toInt().coerceAtLeast(1))
-    )
+    if (saniBannerBitmap != null) {
+        drawImage(
+            image = saniBannerBitmap,
+            dstOffset = IntOffset(left.toInt(), top.toInt()),
+            dstSize = IntSize(boardW.toInt().coerceAtLeast(1), boardH.toInt().coerceAtLeast(1))
+        )
+    } else {
+        drawRect(
+            color = Color(0xFF0B192C),
+            topLeft = Offset(left, top),
+            size = Size(boardW.coerceAtLeast(1f), boardH.coerceAtLeast(1f))
+        )
+    }
 
     if (cmd.isLargeBanner && boardW > 70f) {
         val label = textMeasurer.measure(
