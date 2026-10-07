@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">SANI</string>
+    <string name="lobby_play">DEPLOY MATCH</string>
+    <string name="lobby_characters">OPERATIVES</string>
+    <string name="lobby_missions">MISSIONS</string>
+    <string name="lobby_cosmetics">VAULT</string>
+    <string name="lobby_hud_editor">HUD EDITOR</string>
+    <string name="lobby_settings">SETTINGS</string>
+    <string name="mode_solo">SOLO</string>
+    <string name="mode_duo">DUO</string>
+    <string name="mode_squad">SQUAD</string>
+    <string name="char_sani_name">SANI</string>
+    <string name="char_sani_role">Overdrive Sprinter</string>
+    <string name="char_sani_desc">Activates Kinetic Overdrive for 11 seconds (+45% running speed boost). Cannot fire weapons while active. 30s Cooldown.</string>
+    <string name="char_rima_name">RIMA</string>
+    <string name="char_rima_role">Tactical Pulse Scout</string>
+    <string name="char_rima_desc">Emits a temporary Tactical Recon Pulse that reveals nearby enemies on radar and world indicators for 11 seconds. 20s Cooldown.</string>
+    <string name="hud_fire">FIRE</string>
+    <string name="hud_aim">AIM</string>
+    <string name="hud_scope">SCOPE</string>
+    <string name="hud_reload">RELOAD</string>
+    <string name="hud_jump">JUMP</string>
+    <string name="hud_crouch">CROUCH</string>
+    <string name="hud_prone">PRONE</string>
+    <string name="hud_ability">ABILITY</string>
+    <string name="hud_medkit">MEDKIT</string>
+    <string name="hud_gloo">GLOO</string>
+    <string name="hud_bag">BAG</string>
+    <string name="return_to_lobby">RETURN TO LOBBY</string>
+</resources>

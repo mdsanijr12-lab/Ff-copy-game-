@@ -1,0 +1,6 @@
+{
+  "name": "SANI",
+  "description": "Original mobile third-person Battle Royale game featuring SANI and RIMA operatives, Solo/Duo/Squad modes, dynamic Safe Zone, Auto-Loot, customizable HUD, and low-end device optimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
