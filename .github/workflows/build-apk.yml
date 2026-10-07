@@ -28,9 +28,13 @@ jobs:
           java -version
           echo "JAVA_HOME=${JAVA_HOME}"
           JAVA_VER=$(java -version 2>&1 | head -n 1 | sed -E 's/.*"([0-9]+)(\.[0-9]+)*".*/\1/')
+          if ! [[ "${JAVA_VER}" =~ ^[0-9]+$ ]]; then
+            echo "Error: Active Java major version could not be detected."
+            exit 1
+          fi
           echo "Detected Java major version: ${JAVA_VER}"
-          if [ -z "${JAVA_VER}" ] || [ "${JAVA_VER}" -lt 17 ]; then
-            echo "Error: Java 17 or higher is required (detected ${JAVA_VER})."
+          if [ "${JAVA_VER}" -lt 17 ]; then
+            echo "Error: Java 17 or newer is required (detected Java ${JAVA_VER})."
             exit 1
           fi
 
@@ -42,8 +46,7 @@ jobs:
       - name: Create temporary debug keystore
         run: |
           if [ ! -f "./debug.keystore" ]; then
-            keytool -genkeypair \
-              -v \
+            "${JAVA_HOME}/bin/keytool" -genkeypair \
               -keystore ./debug.keystore \
               -storepass android \
               -alias androiddebugkey \
@@ -53,8 +56,8 @@ jobs:
               -keysize 2048 \
               -validity 10000
           fi
-          if [ ! -f "./debug.keystore" ]; then
-            echo "Error: ./debug.keystore was not created."
+          if [ ! -f "./debug.keystore" ] || [ ! -s "./debug.keystore" ]; then
+            echo "Error: ./debug.keystore could not be created."
             exit 1
           fi
           echo "Confirmed ./debug.keystore exists."
@@ -67,29 +70,31 @@ jobs:
         run: |
           EXPECTED_APK="app/build/outputs/apk/debug/app-debug.apk"
           if [ ! -f "${EXPECTED_APK}" ]; then
-            echo "Expected APK not immediately found at ${EXPECTED_APK}, searching app/build/outputs/apk..."
-            FOUND_APK=$(find app/build/outputs/apk -type f -name "*.apk" \
-              ! -name "*release*" \
-              ! -name "*androidTest*" \
-              ! -name "*test*" | head -n 1)
-            if [ -n "${FOUND_APK}" ] && [ "${FOUND_APK}" != "${EXPECTED_APK}" ]; then
-              mkdir -p "$(dirname "${EXPECTED_APK}")"
-              cp "${FOUND_APK}" "${EXPECTED_APK}"
+            echo "Expected APK not immediately found at ${EXPECTED_APK}. Searching inside app/build/outputs/apk..."
+            if [ -d "app/build/outputs/apk" ]; then
+              echo "Discovered APK paths inside app/build/outputs/apk:"
+              find app/build/outputs/apk -type f -name "*.apk" -print
             fi
+            echo "Error: Expected debug APK does not exist at ${EXPECTED_APK}."
+            exit 1
           fi
-          if [ ! -f "${EXPECTED_APK}" ] || [ ! -s "${EXPECTED_APK}" ]; then
-            echo "Error: Verified non-empty debug APK not found at ${EXPECTED_APK}."
+          if [ ! -f "${EXPECTED_APK}" ]; then
+            echo "Error: ${EXPECTED_APK} is not a regular file."
+            exit 1
+          fi
+          if [ ! -s "${EXPECTED_APK}" ]; then
+            echo "Error: ${EXPECTED_APK} is empty."
             exit 1
           fi
           case "${EXPECTED_APK}" in
             *.apk) ;;
             *)
-              echo "Error: File is not a .apk file."
+              echo "Error: ${EXPECTED_APK} does not have the .apk extension."
               exit 1
               ;;
           esac
           if [ "${EXPECTED_APK}" != "app/build/outputs/apk/debug/app-debug.apk" ]; then
-            echo "Error: APK path does not match expected path."
+            echo "Error: Selected APK is not exactly app/build/outputs/apk/debug/app-debug.apk."
             exit 1
           fi
           echo "Verified debug APK at ${EXPECTED_APK}"
@@ -128,19 +133,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "Error: GitHub CLI (gh) is not available."
+            exit 1
+          fi
           gh --version
+          ASSET_PATH="${{ steps.prepare_asset.outputs.asset_path }}"
+          if [ -z "${ASSET_PATH}" ] || [ ! -f "${ASSET_PATH}" ] || [ ! -s "${ASSET_PATH}" ]; then
+            echo "Error: Prepared release asset does not exist or is empty."
+            exit 1
+          fi
+          case "${ASSET_PATH}" in
+            *.apk) ;;
+            *)
+              echo "Error: Prepared release asset is not a .apk file."
+              exit 1
+              ;;
+          esac
           RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
-          ASSET_PATH="${{ steps.prepare_asset.outputs.asset_path }}"
           NOTES=$(cat <<EOF
           - Automatically generated debug APK
           - Built by GitHub Actions
           - Run number: ${GITHUB_RUN_NUMBER}
           - Run attempt: ${GITHUB_RUN_ATTEMPT}
           - Source commit SHA: ${GITHUB_SHA}
-          - For testing
+          - Intended for testing
           - Not a Play Store production release
-          - Signed with temporary debug keystore
+          - Signed only with a temporary debug keystore
           EOF
           )
           gh release create "${RELEASE_TAG}" "${ASSET_PATH}" \
